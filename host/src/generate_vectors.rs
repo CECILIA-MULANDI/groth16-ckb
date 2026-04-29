@@ -5,36 +5,19 @@
  *  curve:   BN254
  * format:  arkworks compressed serialization
  * Output: ../test_vectors/{vk,proof,public_inputs}.bin
- *  
+ *
  */
 use std::fs;
 use std::path::PathBuf;
 
 use ark_bn254::{Bn254, Fr};
-use ark_ff::PrimeField;
 use ark_groth16::Groth16;
-use ark_relations::{
-    lc,
-    r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError},
-};
 use ark_serialize::CanonicalSerialize;
 use ark_snark::SNARK;
 use ark_std::rand::SeedableRng;
 
-#[derive(Clone)]
-struct SquareCircuit<F: PrimeField> {
-    x: Option<F>,
-    y: Option<F>,
-}
-impl<F: PrimeField> ConstraintSynthesizer<F> for SquareCircuit<F> {
-    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
-        let x = cs.new_witness_variable(|| self.x.ok_or(SynthesisError::AssignmentMissing))?;
-        let y = cs.new_input_variable(|| self.y.ok_or(SynthesisError::AssignmentMissing))?;
+use host::SquareCircuit;
 
-        cs.enforce_constraint(lc!() + x, lc!() + x, lc!() + y)?;
-        Ok(())
-    }
-}
 fn main() {
     // Deterministic RNG so vectors are reproducible across runs.
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(0x6770_7468_3136);
@@ -44,7 +27,7 @@ fn main() {
         x: Some(x),
         y: Some(y),
     };
-
+    // Run the trusted setup
     let (pk, vk) =
         Groth16::<Bn254>::circuit_specific_setup(circuit.clone(), &mut rng).expect("setup");
     let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng).expect("prove");
