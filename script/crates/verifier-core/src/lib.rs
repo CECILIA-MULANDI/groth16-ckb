@@ -124,6 +124,19 @@ pub fn verify(
     let vk = VerifyingKey::<Bn254>::deserialize_compressed(vk_bytes)
         .map_err(|_| VerifyError::InvalidVk)?;
 
+    // Reject infinity on VK points: zero elements collapse the verification
+    // equation in attacker-exploitable ways (γ=∞ makes public inputs irrelevant,
+    // δ=∞ makes C irrelevant, α/β=∞ trivializes the constant pairing,
+    // gamma_abc_g1[i]=∞ silently drops the i-th public input).
+    if vk.alpha_g1.is_zero()
+        || vk.beta_g2.is_zero()
+        || vk.gamma_g2.is_zero()
+        || vk.delta_g2.is_zero()
+        || vk.gamma_abc_g1.iter().any(|p| p.is_zero())
+    {
+        return Err(VerifyError::InvalidVk);
+    }
+
     let proof = Proof::<Bn254>::deserialize_compressed(proof_bytes)
         .map_err(|_| VerifyError::InvalidProof)?;
 

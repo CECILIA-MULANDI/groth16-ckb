@@ -156,3 +156,51 @@ fn proof_with_infinity_a_is_rejected() {
     );
     eprintln!("infinity-A rejected as: {:?}", result.unwrap_err());
 }
+
+fn probe_forged_vk<F>(label: &str, mutate: F)
+where
+    F: FnOnce(&mut VerifyingKey<Bn254>),
+{
+    let s = sample(7, 0xC0FFEE);
+    let mut forged_vk = s.vk.clone();
+    mutate(&mut forged_vk);
+
+    let mut forged_vk_bytes = Vec::new();
+    forged_vk
+        .serialize_compressed(&mut forged_vk_bytes)
+        .expect("serialize forged vk");
+
+    let result = verifier_core::verify(&forged_vk_bytes, &s.proof_bytes, &s.pi_bytes);
+    assert!(
+        result.is_err(),
+        "vk with {label} = identity was ACCEPTED — soundness bug",
+    );
+    eprintln!("vk.{label} infinity rejected as: {:?}", result.unwrap_err());
+}
+
+#[test]
+fn vk_with_infinity_alpha_g1_is_rejected() {
+    probe_forged_vk("alpha_g1", |vk| vk.alpha_g1 = ark_bn254::G1Affine::zero());
+}
+
+#[test]
+fn vk_with_infinity_beta_g2_is_rejected() {
+    probe_forged_vk("beta_g2", |vk| vk.beta_g2 = ark_bn254::G2Affine::zero());
+}
+
+#[test]
+fn vk_with_infinity_gamma_g2_is_rejected() {
+    probe_forged_vk("gamma_g2", |vk| vk.gamma_g2 = ark_bn254::G2Affine::zero());
+}
+
+#[test]
+fn vk_with_infinity_delta_g2_is_rejected() {
+    probe_forged_vk("delta_g2", |vk| vk.delta_g2 = ark_bn254::G2Affine::zero());
+}
+
+#[test]
+fn vk_with_infinity_in_gamma_abc_g1_is_rejected() {
+    probe_forged_vk("gamma_abc_g1[1]", |vk| {
+        vk.gamma_abc_g1[1] = ark_bn254::G1Affine::zero();
+    });
+}
