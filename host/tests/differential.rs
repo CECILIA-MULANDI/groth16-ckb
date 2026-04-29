@@ -2,6 +2,7 @@
 //! ark_groth16::Groth16::verify on freshly-generated proofs.
 
 use ark_bn254::{Bn254, Fr};
+use ark_ec::AffineRepr;
 use ark_groth16::Groth16;
 use ark_serialize::CanonicalSerialize;
 use ark_snark::SNARK;
@@ -131,4 +132,27 @@ fn differential_public_inputs_bit_flip_always_rejects() {
             );
         }
     }
+}
+
+#[test]
+fn proof_with_infinity_a_is_rejected() {
+    let s = sample(7, 0xC0FFEE);
+
+    let forged = Proof::<Bn254> {
+        a: ark_bn254::G1Affine::zero(),
+        b: s.proof.b,
+        c: s.proof.c,
+    };
+
+    let mut forged_bytes = Vec::new();
+    forged
+        .serialize_compressed(&mut forged_bytes)
+        .expect("serialize forged proof");
+
+    let result = verifier_core::verify(&s.vk_bytes, &forged_bytes, &s.pi_bytes);
+    assert!(
+        result.is_err(),
+        "verifier accepted a proof with A = identity (point at infinity) — soundness bug",
+    );
+    eprintln!("infinity-A rejected as: {:?}", result.unwrap_err());
 }

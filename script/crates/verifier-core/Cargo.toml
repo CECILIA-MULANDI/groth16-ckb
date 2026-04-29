@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 ark-bn254 = { workspace = true, features = ["curve"] }
+ark-ec = { workspace = true }
 ark-groth16 = { workspace = true }
 ark-serialize = { workspace = true }
 ark-snark = { workspace = true }

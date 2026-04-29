@@ -613,6 +613,7 @@ name = "verifier-core"
 version = "0.0.0"
 dependencies = [
  "ark-bn254",
+ "ark-ec",
  "ark-groth16",
  "ark-serialize",
  "ark-snark",

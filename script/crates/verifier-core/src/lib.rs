@@ -25,6 +25,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use ark_bn254::{Bn254, Fr};
+use ark_ec::AffineRepr;
 use ark_groth16::{Groth16, Proof, VerifyingKey};
 use ark_serialize::CanonicalDeserialize;
 use ark_snark::SNARK;
@@ -125,6 +126,14 @@ pub fn verify(
 
     let proof = Proof::<Bn254>::deserialize_compressed(proof_bytes)
         .map_err(|_| VerifyError::InvalidProof)?;
+
+    // Reject infinity on proof points: with A=∞ the verification equation
+    // collapses to 1 = e(α,β)·e(Σaᵢ·Lᵢ,γ)·e(C,δ), which an attacker who
+    // controls C and the public inputs can satisfy. Same class of issue for
+    // B=∞ and C=∞. The pairing math alone is not a sufficient guard.
+    if proof.a.is_zero() || proof.b.is_zero() || proof.c.is_zero() {
+        return Err(VerifyError::InvalidProof);
+    }
 
     let mut cursor: &[u8] = &public_inputs_bytes[PI_PREFIX_LEN..];
     let mut public_inputs: Vec<Fr> = Vec::with_capacity(count as usize);
