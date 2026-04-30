@@ -1,4 +1,8 @@
 #![no_std]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![deny(clippy::unreachable)]
 
 //! Groth16 verifier for CKB-VM.
 //!
