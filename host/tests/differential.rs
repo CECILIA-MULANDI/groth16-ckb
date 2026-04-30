@@ -431,3 +431,35 @@ fn empty_buffers_are_rejected() {
         Err(verifier_core::VerifyError::InvalidPublicInputs),
     );
 }
+
+// Regression guard for the OOM gotcha: arkworks `Vec::deserialize_compressed`
+// allocates from an attacker-controlled length prefix without bounding against
+// the buffer. Without the explicit length pre-check, a single flipped bit could
+// trigger a multi-GB allocation. These tests assert fast rejection — completing
+// at all is the load-bearing observation.
+#[test]
+fn vk_with_oversized_ic_len_is_rejected_without_oom() {
+    let s = sample(7, 0xC0FFEE);
+    // VK layout: 224 B fixed header ‖ 8 B u64 LE ic_len ‖ ic_len × 32 B.
+    // Setting ic_len = u64::MAX makes ic_len × 32 overflow usize on the
+    // pre-check's `checked_mul`, so we never reach the deserializer.
+    let mut bad_vk_bytes = s.vk_bytes.clone();
+    bad_vk_bytes[224..232].copy_from_slice(&u64::MAX.to_le_bytes());
+    let result = verifier_core::verify(&bad_vk_bytes, &s.proof_bytes, &s.pi_bytes);
+    assert_eq!(result, Err(verifier_core::VerifyError::InvalidVk));
+}
+
+#[test]
+fn public_inputs_with_oversized_count_is_rejected_without_oom() {
+    let s = sample(7, 0xC0FFEE);
+    // pi layout: 4 B u32 LE count ‖ count × 32 B Fr. count = u32::MAX would
+    // ask the deserializer to allocate ~137 GB. The pre-check's buffer-length
+    // comparison catches it without allocating anything.
+    let mut bad_pi_bytes = s.pi_bytes.clone();
+    bad_pi_bytes[..4].copy_from_slice(&u32::MAX.to_le_bytes());
+    let result = verifier_core::verify(&s.vk_bytes, &s.proof_bytes, &bad_pi_bytes);
+    assert_eq!(
+        result,
+        Err(verifier_core::VerifyError::InvalidPublicInputs),
+    );
+}
