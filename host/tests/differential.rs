@@ -185,7 +185,7 @@ where
         result.is_err(),
         "vk with {label} = identity was ACCEPTED — soundness bug",
     );
-    eprintln!("vk.{label} infinity rejected as: {:?}", result.unwrap_err());
+    eprintln!("vk.{label} forgery rejected as: {:?}", result.unwrap_err());
 }
 
 #[test]
@@ -264,4 +264,65 @@ fn non_canonical_fq_in_proof_is_rejected() {
         "verifier accepted non-canonical Fq in proof.a (modulus as x) — soundness bug",
     );
     eprintln!("non-canonical Fq rejected as: {:?}", result.unwrap_err());
+}
+
+// G1 has cofactor 1 on BN254, so every on-curve G1 point is in the prime-order
+// subgroup — there is no off-subgroup G1 to construct. G2 has a non-trivial
+// cofactor; the tests below exercise the load-bearing case.
+fn off_subgroup_g2(seed: u64) -> ark_bn254::G2Affine {
+    use ark_bn254::{Fq2, G2Affine};
+    use ark_ff::UniformRand;
+
+    let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(seed);
+    for _ in 0..1000 {
+        let x = Fq2::rand(&mut rng);
+        for greatest in [false, true] {
+            if let Some(p) = G2Affine::get_point_from_x_unchecked(x, greatest) {
+                if !p.is_in_correct_subgroup_assuming_on_curve() {
+                    debug_assert!(p.is_on_curve());
+                    return p;
+                }
+            }
+        }
+    }
+    panic!("could not find off-subgroup G2 point in 1000 tries");
+}
+
+#[test]
+fn proof_with_off_subgroup_b_is_rejected() {
+    let s = sample(7, 0xC0FFEE);
+    let bad_b = off_subgroup_g2(0xBAD_BAD);
+
+    let forged = Proof::<Bn254> {
+        a: s.proof.a,
+        b: bad_b,
+        c: s.proof.c,
+    };
+
+    let mut forged_bytes = Vec::new();
+    forged
+        .serialize_compressed(&mut forged_bytes)
+        .expect("serialize forged proof");
+
+    let result = verifier_core::verify(&s.vk_bytes, &forged_bytes, &s.pi_bytes);
+    assert!(
+        result.is_err(),
+        "verifier accepted a proof with off-subgroup B — soundness bug",
+    );
+    eprintln!("off-subgroup B rejected as: {:?}", result.unwrap_err());
+}
+
+#[test]
+fn vk_with_off_subgroup_beta_g2_is_rejected() {
+    probe_forged_vk("beta_g2", |vk| vk.beta_g2 = off_subgroup_g2(0xBAD_BE7A));
+}
+
+#[test]
+fn vk_with_off_subgroup_gamma_g2_is_rejected() {
+    probe_forged_vk("gamma_g2", |vk| vk.gamma_g2 = off_subgroup_g2(0xBAD_6A33A));
+}
+
+#[test]
+fn vk_with_off_subgroup_delta_g2_is_rejected() {
+    probe_forged_vk("delta_g2", |vk| vk.delta_g2 = off_subgroup_g2(0xBAD_DE17A));
 }
