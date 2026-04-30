@@ -355,3 +355,35 @@ fn public_inputs_too_many_is_rejected() {
         Err(verifier_core::VerifyError::PublicInputCountMismatch),
     );
 }
+
+#[test]
+fn proof_with_infinity_b_is_rejected() {
+    let s = sample(7, 0xC0FFEE);
+    let forged = Proof::<Bn254> {
+        a: s.proof.a,
+        b: ark_bn254::G2Affine::zero(),
+        c: s.proof.c,
+    };
+    let mut forged_bytes = Vec::new();
+    forged
+        .serialize_compressed(&mut forged_bytes)
+        .expect("serialize forged proof");
+    let result = verifier_core::verify(&s.vk_bytes, &forged_bytes, &s.pi_bytes);
+    assert_eq!(result, Err(verifier_core::VerifyError::InvalidProof));
+}
+
+#[test]
+fn proof_with_infinity_c_is_rejected() {
+    let s = sample(7, 0xC0FFEE);
+    let forged = Proof::<Bn254> {
+        a: s.proof.a,
+        b: s.proof.b,
+        c: ark_bn254::G1Affine::zero(),
+    };
+    let mut forged_bytes = Vec::new();
+    forged
+        .serialize_compressed(&mut forged_bytes)
+        .expect("serialize forged proof");
+    let result = verifier_core::verify(&s.vk_bytes, &forged_bytes, &s.pi_bytes);
+    assert_eq!(result, Err(verifier_core::VerifyError::InvalidProof));
+}
