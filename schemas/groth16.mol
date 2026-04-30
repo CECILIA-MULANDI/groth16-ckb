@@ -1,0 +1,53 @@
+// Wire format for Groth16 verification on CKB.
+//
+// Top-level types live on-chain:
+//   - Groth16VerifyingKey  -> cell data (lock/type script)
+//   - Groth16Witness       -> witness slot
+//
+// Curve identity is the union discriminant of *Content fields, so the curve
+// tag and the payload bytes cannot disagree. `version` is the wire-format
+// version (orthogonal to curve).
+
+// ----- primitives -----
+array Uint16        [byte; 2];
+array G1Compressed  [byte; 32];
+array G2Compressed  [byte; 64];
+array Byte32        [byte; 32];
+
+vector G1Vec <G1Compressed>;
+vector FrVec <Byte32>;
+
+// ----- BN254 payloads -----
+struct ProofBn254 {
+    a: G1Compressed,
+    b: G2Compressed,
+    c: G1Compressed,
+}
+
+table VerifyingKeyBn254 {
+    alpha_g1:     G1Compressed,
+    beta_g2:      G2Compressed,
+    gamma_g2:     G2Compressed,
+    delta_g2:     G2Compressed,
+    gamma_abc_g1: G1Vec,
+}
+
+table Bn254Witness {
+    proof:         ProofBn254,
+    public_inputs: FrVec,
+}
+
+// ----- curve unions (one variant today; future curves slot in here) -----
+union VerifyingKeyContent { VerifyingKeyBn254 }
+union WitnessContent      { Bn254Witness      }
+
+// ----- top-level on-chain types -----
+table Groth16VerifyingKey {
+    version: Uint16,
+    content: VerifyingKeyContent,
+}
+
+table Groth16Witness {
+    version: Uint16,
+    content: WitnessContent,
+}
