@@ -23,6 +23,17 @@
 //! embedded length prefix without bounding against the buffer, which would
 //! otherwise let an attacker trigger a multi-GB allocation by flipping a bit
 //! in `ic_len` or `count`. The explicit checks below close that gap.
+//!
+//! ## Validation provenance
+//!
+//! - **Subgroup membership (G1 and G2):** enforced by arkworks `deserialize_compressed`,
+//!   which uses `Validate::Yes` by default. For BN254 G1 the cofactor is 1 so this is
+//!   a no-op; for G2 the cofactor is non-trivial and the check is load-bearing.
+//!   We rely on this default and pin `ark-bn254` / `ark-ec` versions accordingly.
+//! - **Canonical Fr / Fq encoding:** enforced by arkworks; deserializers reject
+//!   byte strings encoding values ≥ modulus.
+//! - **Point at infinity (proof and VK):** explicitly rejected below — arkworks
+//!   accepts the infinity flag, so we add the check ourselves.
 
 extern crate alloc;
 
