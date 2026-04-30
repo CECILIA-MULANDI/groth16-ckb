@@ -326,3 +326,32 @@ fn vk_with_off_subgroup_gamma_g2_is_rejected() {
 fn vk_with_off_subgroup_delta_g2_is_rejected() {
     probe_forged_vk("delta_g2", |vk| vk.delta_g2 = off_subgroup_g2(0xBAD_DE17A));
 }
+
+// Public-input count mismatch: pi-side count must equal vk.gamma_abc_g1.len() - 1.
+// Sample circuit has 1 public input (so ic_len = 2). count=0 and count=2 must both
+// be caught by the explicit cross-check, not silently wrapped into a pairing.
+#[test]
+fn public_inputs_too_few_is_rejected() {
+    let s = sample(7, 0xC0FFEE);
+    let bad_pi_bytes = 0u32.to_le_bytes().to_vec();
+    let result = verifier_core::verify(&s.vk_bytes, &s.proof_bytes, &bad_pi_bytes);
+    assert_eq!(
+        result,
+        Err(verifier_core::VerifyError::PublicInputCountMismatch),
+    );
+}
+
+#[test]
+fn public_inputs_too_many_is_rejected() {
+    let s = sample(7, 0xC0FFEE);
+    let mut bad_pi_bytes = Vec::new();
+    bad_pi_bytes.extend_from_slice(&2u32.to_le_bytes());
+    for fe in [Fr::from(1u64), Fr::from(2u64)] {
+        fe.serialize_compressed(&mut bad_pi_bytes).expect("fr");
+    }
+    let result = verifier_core::verify(&s.vk_bytes, &s.proof_bytes, &bad_pi_bytes);
+    assert_eq!(
+        result,
+        Err(verifier_core::VerifyError::PublicInputCountMismatch),
+    );
+}
