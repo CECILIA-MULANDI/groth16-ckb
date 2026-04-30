@@ -214,3 +214,54 @@ fn vk_with_infinity_in_gamma_abc_g1_is_rejected() {
         vk.gamma_abc_g1[1] = ark_bn254::G1Affine::zero();
     });
 }
+
+#[test]
+fn non_canonical_fr_in_public_inputs_is_rejected() {
+    use ark_ff::{BigInteger, PrimeField};
+
+    let s = sample(7, 0xC0FFEE);
+
+    // The Fr modulus encoded as bytes is value-equivalent to 0 but is NOT the
+    // canonical 0 encoding. A canonical-encoding-enforcing deserializer must
+    // reject this with `value < modulus` failing.
+    let modulus_bytes = Fr::MODULUS.to_bytes_le();
+    assert_eq!(modulus_bytes.len(), 32, "Fr modulus must fit in 32 bytes");
+
+    let mut bad_pi_bytes = Vec::new();
+    bad_pi_bytes.extend_from_slice(&1u32.to_le_bytes());
+    bad_pi_bytes.extend_from_slice(&modulus_bytes);
+
+    let result = verifier_core::verify(&s.vk_bytes, &s.proof_bytes, &bad_pi_bytes);
+    assert!(
+        result.is_err(),
+        "verifier accepted non-canonical Fr (modulus as bytes) — soundness bug",
+    );
+    eprintln!("non-canonical Fr rejected as: {:?}", result.unwrap_err());
+}
+
+#[test]
+fn non_canonical_fq_in_proof_is_rejected() {
+    use ark_bn254::Fq;
+    use ark_ff::{BigInteger, PrimeField};
+
+    let s = sample(7, 0xC0FFEE);
+
+    // proof_bytes layout: 32 B proof.a (G1) ‖ 64 B proof.b (G2) ‖ 32 B proof.c (G1).
+    // For G1Affine compressed, the high 2 bits of byte 31 are infinity/y-sign flags;
+    // the rest is the Fq x-coordinate. Fq modulus q is 254-bit, so its top 2 bits
+    // are 0 — encoding q directly leaves both flags clear, asking the deserializer
+    // to interpret the x-coordinate as exactly q. Canonical enforcement requires
+    // x < q, so this must reject.
+    let q_bytes = Fq::MODULUS.to_bytes_le();
+    assert_eq!(q_bytes.len(), 32, "Fq modulus must fit in 32 bytes");
+
+    let mut bad_proof_bytes = s.proof_bytes.clone();
+    bad_proof_bytes[..32].copy_from_slice(&q_bytes);
+
+    let result = verifier_core::verify(&s.vk_bytes, &bad_proof_bytes, &s.pi_bytes);
+    assert!(
+        result.is_err(),
+        "verifier accepted non-canonical Fq in proof.a (modulus as x) — soundness bug",
+    );
+    eprintln!("non-canonical Fq rejected as: {:?}", result.unwrap_err());
+}
