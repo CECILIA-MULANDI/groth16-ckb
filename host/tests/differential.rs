@@ -387,3 +387,47 @@ fn proof_with_infinity_c_is_rejected() {
     let result = verifier_core::verify(&s.vk_bytes, &forged_bytes, &s.pi_bytes);
     assert_eq!(result, Err(verifier_core::VerifyError::InvalidProof));
 }
+
+#[test]
+fn truncated_vk_is_rejected() {
+    let s = sample(7, 0xC0FFEE);
+    let truncated = &s.vk_bytes[..s.vk_bytes.len() - 1];
+    let result = verifier_core::verify(truncated, &s.proof_bytes, &s.pi_bytes);
+    assert_eq!(result, Err(verifier_core::VerifyError::InvalidVk));
+}
+
+#[test]
+fn truncated_proof_is_rejected() {
+    let s = sample(7, 0xC0FFEE);
+    let truncated = &s.proof_bytes[..s.proof_bytes.len() - 1];
+    let result = verifier_core::verify(&s.vk_bytes, truncated, &s.pi_bytes);
+    assert_eq!(result, Err(verifier_core::VerifyError::InvalidProof));
+}
+
+#[test]
+fn truncated_public_inputs_is_rejected() {
+    let s = sample(7, 0xC0FFEE);
+    let truncated = &s.pi_bytes[..s.pi_bytes.len() - 1];
+    let result = verifier_core::verify(&s.vk_bytes, &s.proof_bytes, truncated);
+    assert_eq!(
+        result,
+        Err(verifier_core::VerifyError::InvalidPublicInputs),
+    );
+}
+
+#[test]
+fn empty_buffers_are_rejected() {
+    let s = sample(7, 0xC0FFEE);
+    assert_eq!(
+        verifier_core::verify(&[], &s.proof_bytes, &s.pi_bytes),
+        Err(verifier_core::VerifyError::InvalidVk),
+    );
+    assert_eq!(
+        verifier_core::verify(&s.vk_bytes, &[], &s.pi_bytes),
+        Err(verifier_core::VerifyError::InvalidProof),
+    );
+    assert_eq!(
+        verifier_core::verify(&s.vk_bytes, &s.proof_bytes, &[]),
+        Err(verifier_core::VerifyError::InvalidPublicInputs),
+    );
+}
