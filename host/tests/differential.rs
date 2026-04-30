@@ -58,9 +58,8 @@ fn with_flipped_bit(bytes: &[u8], byte_idx: usize, bit_idx: u8) -> Vec<u8> {
     out[byte_idx] ^= 1 << bit_idx;
     out
 }
-#[test]
-fn differential_x_squared_100_samples() {
-    for i in 0..100u64 {
+fn run_differential_loop(n: u64) {
+    for i in 0..n {
         // any non-zero u64 works
         let x_value = i + 1;
         // distinct seed per iteration
@@ -84,6 +83,17 @@ fn differential_x_squared_100_samples() {
             theirs
         );
     }
+}
+
+#[test]
+fn differential_x_squared_100_samples() {
+    run_differential_loop(100);
+}
+
+#[test]
+#[ignore = "thorough variant — run via `cargo test -- --ignored`"]
+fn differential_x_squared_1000_samples() {
+    run_differential_loop(1000);
 }
 
 #[test]
