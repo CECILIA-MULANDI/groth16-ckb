@@ -38,8 +38,8 @@ table Bn254Witness {
 }
 
 // ----- curve unions (one variant today; future curves slot in here) -----
-union VerifyingKeyContent { VerifyingKeyBn254 }
-union WitnessContent      { Bn254Witness      }
+union VerifyingKeyContent { VerifyingKeyBn254, }
+union WitnessContent      { Bn254Witness, }
 
 // ----- top-level on-chain types -----
 table Groth16VerifyingKey {
