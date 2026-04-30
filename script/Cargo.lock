@@ -436,6 +436,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "groth16-schema"
+version = "0.0.0"
+dependencies = [
+ "molecule",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

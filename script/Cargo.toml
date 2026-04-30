@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/verifier-core", "crates/ckb-script"]
+members = ["crates/verifier-core", "crates/ckb-script", "crates/groth16-schema"]
 
 [workspace.package]
 edition = "2021"
