@@ -1,55 +1,86 @@
 # groth16-ckb
 
-A production-ready Groth16 zkSNARK verifier for CKB-VM.
+A Groth16 zkSNARK verifier for [CKB-VM](https://github.com/nervosnetwork/ckb-vm), built on [arkworks](https://github.com/arkworks-rs).
 
-## Phase 0 spike: feasibility confirmed (2026-04-27)
+This repo provides an on-chain verifier (compiled to `riscv64imac-unknown-none-elf`) plus the host-side libraries and tooling needed to build, test, and integrate it.
 
-A working PoC built on `arkworks` 0.5 verifies a real BN254 Groth16 proof on CKB-VM:
+## Status
+
+- **Phase 0 (feasibility):** complete as of 2026-04-27.
+- **Phase 1 (hardening + wire format):** in progress.
+- **Mainnet release:** audit-gated.
+
+This is pre-audit infrastructure. Do not deploy to mainnet.
+
+## At a glance
+
+| | |
+|---|---|
+| Curve | BN254 |
+| Proof system | Groth16 |
+| Backend | arkworks (`ark-groth16`, `ark-bn254`) 0.5 |
+| Target | `riscv64imac-unknown-none-elf` (CKB-VM) |
+| Environment | `no_std`, `panic = "abort"` |
+| Toolchain | stable Rust, no patches |
+
+## Compatibility
+
+The verifier accepts any Groth16 proof over BN254 in arkworks-compatible serialization. Supported prover toolchains include:
+
+- arkworks (`ark-groth16`) directly
+- circom with the BN254 + Groth16 backend (via an arkworks-format export)
+
+## Building
+
+The on-chain script lives in its own workspace because it targets RISC-V `no_std`.
+
+```sh
+# On-chain script (verifier-core + ckb-script)
+cd script
+cargo build --release --target riscv64imac-unknown-none-elf
+```
+
+The host workspace builds for the native target:
+
+```sh
+# Host-side tooling and tests
+cargo build --workspace
+```
+
+To regenerate the Molecule bindings after editing `schemas/groth16.mol`:
+
+```sh
+./scripts/regen-schema.sh   # requires `moleculec` on PATH
+```
+
+## Testing
+
+```sh
+# Host-side differential tests against arkworks reference
+cargo test --workspace
+
+# Larger differential sample (slower, ignored by default)
+cargo test --workspace -- --ignored
+```
+
+The differential harness compares `verifier-core`'s output against arkworks across canonical and adversarial inputs (non-canonical field elements, off-subgroup `G2` points, points at infinity, truncated and oversized buffers).
+
+## Performance
+
+Phase 0 baseline (BN254, sample `x * x = y` circuit):
 
 | Metric | Result |
 |---|---|
-| Cycles per verify | **~97.5M** (2.9% of 3.5B block limit) |
-| Binary size | **75,576 bytes** |
-| Heap | fits in default 1.5 MB |
-| Toolchain | `rustc` 1.88, `ark-groth16` 0.5, `ckb-std` 1.1 — no patches |
+| Cycles per verify | ~97.5M (~2.9% of the 3.5B block limit) |
+| Binary size | 75,576 bytes |
+| Heap | fits in the default 1.5 MB |
 
-This unblocks the rest of the build plan. Hardening, audit, and mainnet release follow per `PLAN.md`.
-
-## Origin
-
-The infrastructure gap this project addresses was identified while building [Spectre](https://github.com/CECILIA-MULANDI/spectre-protocol-ckb), a key recovery protocol for AI agents on CKB. Spectre's Phase 4 requires on-chain ZK verification of Noir-generated email proofs, but no production-ready SNARK verifier currently runs on CKB-VM. This repo addresses the on-chain Groth16/BN254 slice of that gap.
-
-## What this is
-
-A `no_std` Rust verifier targeting `riscv64imac-unknown-none-elf` for the CKB virtual machine. It accepts Groth16 proofs over BN254 in arkworks-compatible serialization.
-
-- **Curve:** BN254
-- **Proof system:** Groth16
-- **Target:** `riscv64imac-unknown-none-elf` (CKB-VM)
-- **Backend:** arkworks (`ark-groth16`, `ark-bn254`)
-
-## What it accepts
-
-Any Groth16 proof over BN254 produced with arkworks-compatible serialization. This covers circuits written directly in `arkworks`, `circom` (with BN254 + Groth16 backend), and similar toolchains.
-
-## What it does not accept
-
-- Native Noir / Barretenberg proofs (UltraPlonk, UltraHonk) — these are a different proof system and encoding. Using this verifier with a Noir circuit requires a prover-side adapter that emits arkworks-format Groth16 proofs.
-- Other proof systems: PLONK, STARKs, Halo2, etc.
-- Other curves: BLS12-381, Pasta, etc.
-
-This project addresses the Groth16-on-BN254 slice of the CKB-VM ZK verification gap. PLONK / UltraHonk verification on CKB-VM is separate, longer-term work.
-
-## Scope
-
-This repo provides the on-chain verifier and the host-side SDKs needed to use it.
-
-For Noir users specifically, an additional prover-side adapter is needed to convert Noir circuits/proofs into the arkworks-Groth16 format this verifier accepts. That adapter is a separate project, not delivered here. Native arkworks and circom users can adopt this verifier directly with no adapter.
+These numbers will move as hardening lands; treat them as a feasibility baseline rather than a final benchmark.
 
 ## Roadmap
 
-See the project plan for phased milestones, acceptance criteria, and audit approach. Mainnet release is audit-gated.
+The work is organised in phases: feasibility, verifier-core hardening, on-chain wire format, integration tooling, and audit. Mainnet release is gated on a third-party audit. Detailed milestones and acceptance criteria are tracked in the project's issue tracker.
 
-## License
+## Origin
 
-To be dual-licensed under MIT and Apache-2.0. License files will be added before the first tagged release.
+The infrastructure gap this project addresses was identified while building [Spectre](https://github.com/CECILIA-MULANDI/spectre-protocol-ckb), a key recovery protocol for AI agents on CKB. Spectre's later phases require on-chain ZK verification, but no production-ready SNARK verifier currently runs on CKB-VM. This repo addresses the Groth16-on-BN254 slice of that gap as general CKB infrastructure, useful to any CKB application that wants on-chain Groth16 verification, not just Spectre.
