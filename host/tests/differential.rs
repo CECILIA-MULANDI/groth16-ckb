@@ -409,10 +409,7 @@ fn truncated_public_inputs_is_rejected() {
     let s = sample(7, 0xC0FFEE);
     let truncated = &s.pi_bytes[..s.pi_bytes.len() - 1];
     let result = verifier_core::verify(&s.vk_bytes, &s.proof_bytes, truncated);
-    assert_eq!(
-        result,
-        Err(verifier_core::VerifyError::InvalidPublicInputs),
-    );
+    assert_eq!(result, Err(verifier_core::VerifyError::InvalidPublicInputs),);
 }
 
 #[test]
@@ -458,8 +455,5 @@ fn public_inputs_with_oversized_count_is_rejected_without_oom() {
     let mut bad_pi_bytes = s.pi_bytes.clone();
     bad_pi_bytes[..4].copy_from_slice(&u32::MAX.to_le_bytes());
     let result = verifier_core::verify(&s.vk_bytes, &s.proof_bytes, &bad_pi_bytes);
-    assert_eq!(
-        result,
-        Err(verifier_core::VerifyError::InvalidPublicInputs),
-    );
+    assert_eq!(result, Err(verifier_core::VerifyError::InvalidPublicInputs),);
 }
