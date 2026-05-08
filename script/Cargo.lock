@@ -312,6 +312,8 @@ name = "ckb-script"
 version = "0.0.0"
 dependencies = [
  "ckb-std",
+ "groth16-schema",
+ "molecule",
  "verifier-core",
 ]
 

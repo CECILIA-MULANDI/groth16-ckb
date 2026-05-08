@@ -9,14 +9,36 @@ ckb_std::entry!(program_entry);
 #[cfg(not(any(feature = "library", test)))]
 ckb_std::default_alloc!();
 
+use alloc::vec::Vec;
+
+use ckb_std::{
+    ckb_constants::Source,
+    error::SysError,
+    high_level::{load_cell_data, load_script, load_witness_args, look_for_dep_with_data_hash},
+};
+use groth16_schema::{
+    Groth16VerifyingKeyReader, Groth16WitnessReader, VerifyingKeyContentUnionReader,
+    WitnessContentUnionReader,
+};
+use molecule::prelude::Reader;
 use verifier_core::VerifyError;
 
-// Phase 0 spike: hardcode the test vectors via include_bytes!.
-// In production the script will load these from witness / cell-data.
-// Path is relative to this file: script/crates/ckb-script/src/main.rs → repo root.
-const VK_BYTES: &[u8] = include_bytes!("../../../../test_vectors/vk.bin");
-const PROOF_BYTES: &[u8] = include_bytes!("../../../../test_vectors/proof.bin");
-const PI_BYTES: &[u8] = include_bytes!("../../../../test_vectors/public_inputs.bin");
+// Wire-format constants
+
+const VERSION_V1: u16 = 1;
+
+const G1_LEN: usize = 32;
+const G2_LEN: usize = 64;
+const FR_LEN: usize = 32;
+
+const PROOF_LEN: usize = G1_LEN + G2_LEN + G1_LEN; // 128
+const VK_FIXED_HEADER_LEN: usize = G1_LEN + 3 * G2_LEN; // 224
+const VK_VEC_PREFIX_LEN: usize = 8; // u64 ic_len
+const PI_PREFIX_LEN: usize = 4; // u32 count
+
+const ARGS_LEN: usize = 32;
+
+// ---- Exit codes
 
 const ERROR_INVALID_VK: i8 = 1;
 const ERROR_INVALID_PROOF: i8 = 2;
@@ -24,8 +46,160 @@ const ERROR_INVALID_PUBLIC_INPUTS: i8 = 3;
 const ERROR_PUBLIC_INPUT_COUNT_MISMATCH: i8 = 4;
 const ERROR_VERIFICATION_FAILED: i8 = 5;
 
+const ERROR_SCRIPT_LOAD_FAILED: i8 = 10;
+const ERROR_BAD_ARGS_LENGTH: i8 = 11;
+const ERROR_VK_CELL_NOT_FOUND: i8 = 12;
+const ERROR_VK_LOAD_FAILED: i8 = 13;
+const ERROR_VK_MOLECULE_DECODE: i8 = 14;
+const ERROR_WITNESS_LOAD_FAILED: i8 = 15;
+const ERROR_WITNESS_MISSING_INPUT_TYPE: i8 = 16;
+const ERROR_WITNESS_MOLECULE_DECODE: i8 = 17;
+const ERROR_VERSION_MISMATCH: i8 = 18;
+// Reserved for when `VerifyingKeyContent` / `WitnessContent` gain non-BN254
+// variants. Today the union has a single curve so the match below is
+// exhaustive without producing this code.
+#[allow(dead_code)]
+const ERROR_UNSUPPORTED_CURVE: i8 = 19;
+
+// Helpers
+
+/// Find the cell_dep whose data_hash equals `args` and return its raw bytes.
+///
+/// `args` is the script's arguments (32 bytes = blake2b256 of the intended
+/// VK cell's data); `look_for_dep_with_data_hash` walks `Source::CellDep`
+/// and returns the index of the first match — sufficient here, since two
+/// cell_deps with the same `data_hash` carry identical bytes.
+fn load_bound_vk_bytes(args: &[u8]) -> Result<Vec<u8>, i8> {
+    let idx = look_for_dep_with_data_hash(args).map_err(|e| match e {
+        SysError::IndexOutOfBound => ERROR_VK_CELL_NOT_FOUND,
+        _ => ERROR_VK_LOAD_FAILED,
+    })?;
+    load_cell_data(idx, Source::CellDep).map_err(|_| ERROR_VK_LOAD_FAILED)
+}
+
+/// Load this script's witness from the script-group input slot 0, decoded as
+/// `WitnessArgs`. Return the raw bytes of the `input_type` field — these are
+/// the molecule-encoded `Groth16Witness`.
+fn load_proof_witness_bytes() -> Result<Vec<u8>, i8> {
+    let wa = load_witness_args(0, Source::GroupInput).map_err(|_| ERROR_WITNESS_LOAD_FAILED)?;
+    let input_type = wa
+        .input_type()
+        .to_opt()
+        .ok_or(ERROR_WITNESS_MISSING_INPUT_TYPE)?;
+    Ok(input_type.raw_data().to_vec())
+}
+
+/// Decode `Groth16VerifyingKey` and rebuild the arkworks-shaped VK buffer:
+///
+///   alpha_g1 (32) || beta_g2 (64) || gamma_g2 (64) || delta_g2 (64)
+///     || u64_le ic_len || ic_len * 32 (gamma_abc_g1 entries)
+///
+/// `Reader::from_slice` recursively validates structure (offsets, item
+/// counts, fixed-array sizes), so once we hold a Reader every `as_slice()`
+/// returns a correctly-sized byte string.
+fn decode_vk_to_arkworks(molecule_bytes: &[u8]) -> Result<Vec<u8>, i8> {
+    let r = Groth16VerifyingKeyReader::from_slice(molecule_bytes)
+        .map_err(|_| ERROR_VK_MOLECULE_DECODE)?;
+
+    let version_bytes: [u8; 2] = r
+        .version()
+        .as_slice()
+        .try_into()
+        .map_err(|_| ERROR_VK_MOLECULE_DECODE)?;
+    if u16::from_le_bytes(version_bytes) != VERSION_V1 {
+        return Err(ERROR_VERSION_MISMATCH);
+    }
+
+    // Single union variant today; when the schema gains curves the compiler
+    // will require a new arm here (returning ERROR_UNSUPPORTED_CURVE).
+    let bn254 = match r.content().to_enum() {
+        VerifyingKeyContentUnionReader::VerifyingKeyBn254(v) => v,
+    };
+
+    let ic = bn254.gamma_abc_g1();
+    let ic_len = ic.item_count();
+
+    let mut buf = Vec::with_capacity(VK_FIXED_HEADER_LEN + VK_VEC_PREFIX_LEN + ic_len * G1_LEN);
+    buf.extend_from_slice(bn254.alpha_g1().as_slice());
+    buf.extend_from_slice(bn254.beta_g2().as_slice());
+    buf.extend_from_slice(bn254.gamma_g2().as_slice());
+    buf.extend_from_slice(bn254.delta_g2().as_slice());
+    buf.extend_from_slice(&(ic_len as u64).to_le_bytes());
+    for i in 0..ic_len {
+        buf.extend_from_slice(ic.get_unchecked(i).as_slice());
+    }
+    Ok(buf)
+}
+
+/// Decode `Groth16Witness` and produce arkworks-shaped (proof, public_inputs):
+///
+///   proof: a (32) || b (64) || c (32)               — fixed 128 bytes
+///   pi:    u32_le count || count * 32 (Fr elements)
+fn decode_witness_to_arkworks(molecule_bytes: &[u8]) -> Result<(Vec<u8>, Vec<u8>), i8> {
+    let r = Groth16WitnessReader::from_slice(molecule_bytes)
+        .map_err(|_| ERROR_WITNESS_MOLECULE_DECODE)?;
+
+    let version_bytes: [u8; 2] = r
+        .version()
+        .as_slice()
+        .try_into()
+        .map_err(|_| ERROR_WITNESS_MOLECULE_DECODE)?;
+    if u16::from_le_bytes(version_bytes) != VERSION_V1 {
+        return Err(ERROR_VERSION_MISMATCH);
+    }
+
+    let bn254 = match r.content().to_enum() {
+        WitnessContentUnionReader::Bn254Witness(v) => v,
+    };
+
+    let proof = bn254.proof();
+    let mut proof_buf = Vec::with_capacity(PROOF_LEN);
+    proof_buf.extend_from_slice(proof.a().as_slice());
+    proof_buf.extend_from_slice(proof.b().as_slice());
+    proof_buf.extend_from_slice(proof.c().as_slice());
+
+    let pi = bn254.public_inputs();
+    let count = pi.item_count();
+    let mut pi_buf = Vec::with_capacity(PI_PREFIX_LEN + count * FR_LEN);
+    pi_buf.extend_from_slice(&(count as u32).to_le_bytes());
+    for i in 0..count {
+        pi_buf.extend_from_slice(pi.get_unchecked(i).as_slice());
+    }
+
+    Ok((proof_buf, pi_buf))
+}
+
+// Entry
+
 pub fn program_entry() -> i8 {
-    match verifier_core::verify(VK_BYTES, PROOF_BYTES, PI_BYTES) {
+    let script = match load_script() {
+        Ok(s) => s,
+        Err(_) => return ERROR_SCRIPT_LOAD_FAILED,
+    };
+    let args = script.args().raw_data();
+    if args.len() != ARGS_LEN {
+        return ERROR_BAD_ARGS_LENGTH;
+    }
+
+    let vk_molecule = match load_bound_vk_bytes(&args) {
+        Ok(b) => b,
+        Err(code) => return code,
+    };
+    let witness_molecule = match load_proof_witness_bytes() {
+        Ok(b) => b,
+        Err(code) => return code,
+    };
+
+    let vk_bytes = match decode_vk_to_arkworks(&vk_molecule) {
+        Ok(b) => b,
+        Err(code) => return code,
+    };
+    let (proof_bytes, pi_bytes) = match decode_witness_to_arkworks(&witness_molecule) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    match verifier_core::verify(&vk_bytes, &proof_bytes, &pi_bytes) {
         Ok(()) => 0,
         Err(VerifyError::InvalidVk) => ERROR_INVALID_VK,
         Err(VerifyError::InvalidProof) => ERROR_INVALID_PROOF,
