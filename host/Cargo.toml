@@ -20,3 +20,5 @@ ark-snark = { workspace = true }
 ark-r1cs-std = { workspace = true }
 ark-std = { workspace = true, features = ["std"] }
 verifier-core = { path = "../script/crates/verifier-core" }
+molecule = { version = "0.9", default-features = false, features = ["std"] }
+groth16-schema = { path = "../script/crates/groth16-schema" }
