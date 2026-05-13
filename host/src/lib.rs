@@ -6,7 +6,7 @@ use ark_bn254::{Bn254, Fr};
 use ark_ff::PrimeField;
 use ark_relations::{
     lc,
-    r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError},
+    r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
 };
 use ark_serialize::CanonicalSerialize;
 use groth16_schema::{
@@ -31,6 +31,31 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SquareCircuit<F> {
         let x = cs.new_witness_variable(|| self.x.ok_or(SynthesisError::AssignmentMissing))?;
         let y = cs.new_input_variable(|| self.y.ok_or(SynthesisError::AssignmentMissing))?;
         cs.enforce_constraint(lc!() + x, lc!() + x, lc!() + y)?;
+        Ok(())
+    }
+}
+
+/// Circuit with `public_inputs.len()` public inputs and one private witness
+/// `sum`, constrained as `sum == sum(public_inputs)`. Used to benchmark how
+/// the verifier scales with public-input count — the per-input cost is the
+/// variable we want to isolate, so the internal constraint count is fixed
+/// at one regardless of N.
+#[derive(Clone)]
+pub struct SumCircuit<F: PrimeField> {
+    pub public_inputs: Vec<Option<F>>,
+    pub sum: Option<F>,
+}
+
+impl<F: PrimeField> ConstraintSynthesizer<F> for SumCircuit<F> {
+    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
+        let mut pi_lc = lc!();
+        for pi in &self.public_inputs {
+            let v = cs.new_input_variable(|| pi.ok_or(SynthesisError::AssignmentMissing))?;
+            pi_lc = pi_lc + v;
+        }
+        let sum_var =
+            cs.new_witness_variable(|| self.sum.ok_or(SynthesisError::AssignmentMissing))?;
+        cs.enforce_constraint(lc!() + sum_var, lc!() + Variable::One, pi_lc)?;
         Ok(())
     }
 }
@@ -184,5 +209,24 @@ mod tests {
         assert_eq!(bn254.proof().b().as_slice().len(), 64);
         assert_eq!(bn254.proof().c().as_slice().len(), 32);
         assert_eq!(bn254.public_inputs().item_count(), pi.len());
+    }
+
+    #[test]
+    fn sum_circuit_proves_and_verifies() {
+        let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(0xDEAD);
+        let pi: Vec<Fr> = (1u64..=4).map(Fr::from).collect();
+        let sum: Fr = pi.iter().copied().sum();
+        let circuit = SumCircuit {
+            public_inputs: pi.iter().copied().map(Some).collect(),
+            sum: Some(sum),
+        };
+        let (pk, vk) = Groth16::<Bn254>::circuit_specific_setup(circuit.clone(), &mut rng)
+            .expect("setup");
+        let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng).expect("prove");
+        let pvk = Groth16::<Bn254>::process_vk(&vk).expect("process_vk");
+        assert!(
+            Groth16::<Bn254>::verify_with_processed_vk(&pvk, &pi, &proof).expect("verify"),
+            "SumCircuit proof should verify against its own VK"
+        );
     }
 }
