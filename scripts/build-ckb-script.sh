@@ -24,10 +24,32 @@ if ! rustup target list --installed | grep -q "^${TARGET}$"; then
     exit 1
 fi
 
+# Rustflags. Two concerns combined:
+#
+# 1. `-C target-feature=-a`: disable the RISC-V A (atomic) extension. ckb-vm
+#    1.x does not decode atomic ordering bits (`lr.d.aq`, `sc.d.rl`), so
+#    LLVM must lower SeqCst atomics via libcalls instead. This flag mirrors
+#    `script/.cargo/config.toml`; cargo's env-var RUSTFLAGS *replaces*
+#    config rustflags rather than merging, so both layers need it.
+#
+# 2. `--remap-path-prefix`: arkworks transitive deps emit `assert!` location
+#    data even under `panic = "abort"`, so without remap the binary embeds
+#    /home/<user>/.cargo and /home/<user>/.rustup paths. Remap rewrites
+#    those to canonical synthetic paths so the binary doesn't depend on the
+#    build user's home layout. The exact spelling on the right of `=` is
+#    part of the build's identity.
+CARGO_HOME_PATH="${CARGO_HOME:-$HOME/.cargo}"
+RUSTUP_HOME_PATH="${RUSTUP_HOME:-$HOME/.rustup}"
+export RUSTFLAGS="-C target-feature=-a --remap-path-prefix=${CARGO_HOME_PATH}/registry/src=/cargo-registry --remap-path-prefix=${RUSTUP_HOME_PATH}/toolchains=/rustup-toolchains --remap-path-prefix=${REPO_ROOT}=/build"
+
 # cd into script/ so rustup honours script/rust-toolchain.toml — the lockfile
-# pins ckb-gen-types 1.1 which requires rustc >= 1.92.
+# pins ckb-gen-types 1.1 which requires rustc >= 1.92, and the toolchain is
+# pinned to a specific version for reproducibility.
 cd "${REPO_ROOT}/script"
-cargo build --release --target "${TARGET}" -p "${PKG}"
+# --locked: refuse to rewrite Cargo.lock. Any out-of-date lock is a build error,
+# not an automatic dep bump, so the produced binary depends only on inputs in
+# the tree.
+cargo build --release --locked --target "${TARGET}" -p "${PKG}"
 
 OUT="${REPO_ROOT}/script/target/${TARGET}/release/${PKG}"
 echo "built: ${OUT}"

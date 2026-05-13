@@ -1,3 +1,6 @@
 [toolchain]
-channel = "stable"
+# Pinned for reproducible builds — see scripts/verify-reproducible.sh. Bump
+# only with intent: any change to this version produces a new on-chain
+# code-hash and breaks existing bindings.
+channel = "1.94.1"
 targets = ["riscv64imac-unknown-none-elf"]
