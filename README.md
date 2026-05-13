@@ -6,8 +6,9 @@ This repo provides an on-chain verifier (compiled to `riscv64imac-unknown-none-e
 
 ## Status
 
-- **Phase 0 (feasibility):** complete as of 2026-04-27.
-- **Phase 1 (hardening + wire format):** in progress.
+- **Phase 0 (feasibility):** complete 2026-04-27.
+- **Phase 1 (verifier-core hardening + Molecule wire format):** complete 2026-05-07.
+- **Phase 2 (on-chain script + integration tests + benchmarks):** in progress.
 - **Mainnet release:** audit-gated.
 
 This is pre-audit infrastructure. Do not deploy to mainnet.
@@ -36,8 +37,7 @@ The on-chain script lives in its own workspace because it targets RISC-V `no_std
 
 ```sh
 # On-chain script (verifier-core + ckb-script)
-cd script
-cargo build --release --target riscv64imac-unknown-none-elf
+./scripts/build-ckb-script.sh
 ```
 
 The host workspace builds for the native target:
@@ -61,21 +61,35 @@ cargo test --workspace
 
 # Larger differential sample (slower, ignored by default)
 cargo test --workspace -- --ignored
+
+# End-to-end integration tests through ckb-testtool (requires the on-chain
+# binary built first via scripts/build-ckb-script.sh)
+cargo test -p integration-tests
 ```
 
-The differential harness compares `verifier-core`'s output against arkworks across canonical and adversarial inputs (non-canonical field elements, off-subgroup `G2` points, points at infinity, truncated and oversized buffers).
+The differential harness compares `verifier-core`'s output against arkworks across canonical and adversarial inputs (non-canonical field elements, off-subgroup `G2` points, points at infinity, truncated and oversized buffers). The integration tests exercise the production call path: VK in a `cell_dep`, proof + public inputs in `WitnessArgs.input_type`, decoded through Molecule and handed to `verifier-core`.
 
 ## Performance
 
-Phase 0 baseline (BN254, sample `x * x = y` circuit):
+Cycle counts on the production call path (Molecule-decode VK from a `cell_dep`, proof from `WitnessArgs.input_type`, verify on `riscv64imac` CKB-VM) for a circuit with `N` public inputs:
 
-| Metric | Result |
-|---|---|
-| Cycles per verify | ~97.5M (~2.9% of the 3.5B block limit) |
-| Binary size | 75,576 bytes |
-| Heap | fits in the default 1.5 MB |
+| num_public_inputs | cycles      | % of 250M bound |
+|------------------:|------------:|----------------:|
+|                 1 | 102,419,901 |            41.0 |
+|                 4 | 103,235,023 |            41.3 |
+|                 8 | 104,285,580 |            41.7 |
+|                16 | 106,588,619 |            42.6 |
+|                32 | 111,343,778 |            44.5 |
+|                64 | 121,129,055 |            48.5 |
 
-These numbers will move as hardening lands; treat them as a feasibility baseline rather than a final benchmark.
+The fixed-cost component (~102M cycles at N=1) is the pairing check; each additional public input adds ~270k–300k cycles for one G1 scalar multiplication. Binary size remains 75 KB and the default 1.5 MB heap is sufficient across the whole range.
+
+Reproduce with:
+
+```sh
+./scripts/build-ckb-script.sh
+cargo test -p integration-tests --test cycles -- --ignored --nocapture
+```
 
 ## Roadmap
 
