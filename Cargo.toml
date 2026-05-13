@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["host"]
+members = ["host", "integration-tests"]
 
 [workspace.package]
 edition = "2021"
