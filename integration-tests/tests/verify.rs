@@ -217,6 +217,64 @@ fn wrong_vk_for_proof_rejected() {
 }
 
 #[test]
+fn creation_of_trigger_cell_permitted() {
+    // The verifier must permit cell creation freely — `Source::GroupInput` is
+    // empty when the script runs on the output side, so there is no proof to
+    // check. Verification only runs when the cell is later spent. This
+    // matches the prevailing CKB type-script pattern (SUDT etc.) and makes
+    // the verifier deployable as a type script on real CKB.
+    let f = sample_fixture(0xC0FFEE);
+    let vk_molecule = encode_vk_molecule(&f.vk);
+    let args = blake2b_256(&vk_molecule);
+
+    let mut context = Context::default();
+    let script_op = context.deploy_cell(script_binary());
+    let always_success_op = context.deploy_cell(ALWAYS_SUCCESS.clone());
+
+    let type_script = context
+        .build_script(&script_op, Bytes::from(args.to_vec()))
+        .expect("verifier type script");
+    let lock_script = context
+        .build_script(&always_success_op, Bytes::new())
+        .expect("always-success lock");
+
+    // Funding input — its lock runs but no type, so the verifier doesn't see
+    // it on Source::GroupInput. The verifier appears only on the output below.
+    let funding_op = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(2000u64)
+            .lock(lock_script.clone())
+            .build(),
+        Bytes::new(),
+    );
+    let input = CellInput::new_builder()
+        .previous_output(funding_op)
+        .build();
+
+    let output = CellOutput::new_builder()
+        .capacity(1000u64)
+        .lock(lock_script)
+        .type_(Some(type_script).pack())
+        .build();
+
+    // No VK cell_dep, no WitnessArgs.input_type — creation needs neither.
+    let tx = context.complete_tx(
+        TransactionBuilder::default()
+            .input(input)
+            .output(output)
+            .output_data(Bytes::new().pack())
+            .cell_dep(CellDep::new_builder().out_point(script_op).build())
+            .cell_dep(CellDep::new_builder().out_point(always_success_op).build())
+            .build(),
+    );
+
+    let cycles = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect("trigger cell creation must succeed without a proof");
+    eprintln!("trigger cell created at {} cycles", cycles);
+}
+
+#[test]
 fn bad_witness_version_rejected() {
     // Groth16Witness is a Molecule table with two fields (version, content).
     // The table header is `[total_size: u32][offset_version: u32][offset_content: u32]`,
