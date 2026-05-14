@@ -1,0 +1,23 @@
+{
+  "name": "@groth16-ckb/example-square-root",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end square-root example: x*x=y verified on CKB via the groth16-ckb verifier",
+  "scripts": {
+    "build-tx": "tsx src/build-verify-tx.ts",
+    "deploy": "tsx src/deploy.ts",
+    "verify": "tsx src/verify.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "^1.12.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
