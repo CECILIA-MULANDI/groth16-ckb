@@ -78,15 +78,22 @@ fn load_bound_vk_bytes(args: &[u8]) -> Result<Vec<u8>, i8> {
 }
 
 /// Load this script's witness from the script-group input slot 0, decoded as
-/// `WitnessArgs`. Return the raw bytes of the `input_type` field — these are
-/// the molecule-encoded `Groth16Witness`.
-fn load_proof_witness_bytes() -> Result<Vec<u8>, i8> {
-    let wa = load_witness_args(0, Source::GroupInput).map_err(|_| ERROR_WITNESS_LOAD_FAILED)?;
+/// `WitnessArgs`. Returns:
+///   - `Ok(Some(bytes))` — `input_type` bytes (molecule-encoded `Groth16Witness`),
+///   - `Ok(None)` — no script-group input exists (the script is running on the
+///     output side at cell creation; there is no proof to verify),
+///   - `Err(code)` — load or shape failure to surface as a verifier exit code.
+fn load_proof_witness_bytes() -> Result<Option<Vec<u8>>, i8> {
+    let wa = match load_witness_args(0, Source::GroupInput) {
+        Ok(w) => w,
+        Err(SysError::IndexOutOfBound) => return Ok(None),
+        Err(_) => return Err(ERROR_WITNESS_LOAD_FAILED),
+    };
     let input_type = wa
         .input_type()
         .to_opt()
         .ok_or(ERROR_WITNESS_MISSING_INPUT_TYPE)?;
-    Ok(input_type.raw_data().to_vec())
+    Ok(Some(input_type.raw_data().to_vec()))
 }
 
 /// Decode `Groth16VerifyingKey` and rebuild the arkworks-shaped VK buffer:
@@ -181,11 +188,17 @@ pub fn program_entry() -> i8 {
         return ERROR_BAD_ARGS_LENGTH;
     }
 
-    let vk_molecule = match load_bound_vk_bytes(&args) {
-        Ok(b) => b,
+    // Probe the script-group input first: an empty group means we are running
+    // on the output side at cell creation, where there is no proof to verify.
+    // Permit creation freely — verification only runs when the cell is spent.
+    // This matches the prevailing CKB type-script pattern (SUDT, xUDT, etc.).
+    let witness_molecule = match load_proof_witness_bytes() {
+        Ok(Some(b)) => b,
+        Ok(None) => return 0,
         Err(code) => return code,
     };
-    let witness_molecule = match load_proof_witness_bytes() {
+
+    let vk_molecule = match load_bound_vk_bytes(&args) {
         Ok(b) => b,
         Err(code) => return code,
     };
