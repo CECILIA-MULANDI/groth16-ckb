@@ -16,7 +16,7 @@ use ark_serialize::CanonicalSerialize;
 use ark_snark::SNARK;
 use ark_std::rand::SeedableRng;
 
-use host::SquareCircuit;
+use host::{encode_vk_molecule, encode_witness_molecule, SquareCircuit};
 
 fn main() {
     // Deterministic RNG so vectors are reproducible across runs.
@@ -65,10 +65,23 @@ fn main() {
     fs::write(out_dir.join("proof.bin"), &proof_bytes).expect("write proof");
     fs::write(out_dir.join("public_inputs.bin"), &pi_bytes).expect("write pi");
 
+    let vk_mol = encode_vk_molecule(&vk);
+    let witness_mol = encode_witness_molecule(&proof, &public_inputs);
+    fs::write(out_dir.join("vk.mol.bin"), &vk_mol).expect("write vk.mol");
+    fs::write(out_dir.join("witness.mol.bin"), &witness_mol).expect("write witness.mol");
+
+    // VK's CKB data_hash — this is the value a consumer puts in the type
+    // script's `args`, since ckb-script matches VK cell_deps by data_hash.
+    let vk_data_hash = ckb_hash::blake2b_256(&vk_mol);
+    fs::write(out_dir.join("vk_data_hash.bin"), vk_data_hash).expect("write vk_data_hash");
+
     println!(
-        "wrote test_vectors:\n  vk.bin            {} bytes\n  proof.bin         {} bytes\n  public_inputs.bin {} bytes",
+        "wrote test_vectors:\n  vk.bin            {} bytes\n  proof.bin         {} bytes\n  public_inputs.bin {} bytes\n  vk.mol.bin        {} bytes\n  witness.mol.bin   {} bytes\n  vk_data_hash.bin  {} bytes",
         vk_bytes.len(),
         proof_bytes.len(),
-        pi_bytes.len()
+        pi_bytes.len(),
+        vk_mol.len(),
+        witness_mol.len(),
+        vk_data_hash.len(),
     );
 }

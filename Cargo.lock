@@ -1257,6 +1257,7 @@ dependencies = [
  "ark-serialize",
  "ark-snark",
  "ark-std",
+ "ckb-hash",
  "groth16-schema",
  "molecule",
  "verifier-core",

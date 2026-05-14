@@ -22,3 +22,4 @@ ark-std = { workspace = true, features = ["std"] }
 verifier-core = { path = "../script/crates/verifier-core" }
 molecule = { version = "0.9", default-features = false, features = ["std"] }
 groth16-schema = { path = "../script/crates/groth16-schema" }
+ckb-hash = "1.1"
