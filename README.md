@@ -10,7 +10,7 @@ This repo provides an on-chain verifier (compiled to `riscv64imac-unknown-none-e
 - **Phase 1 (verifier-core hardening + Molecule wire format):** complete 2026-05-07.
 - **Phase 2 (on-chain script + integration tests + benchmarks):** complete 2026-05-13.
 - **Phase 3 (host SDKs + reference example):** complete 2026-05-13. End-to-end verification on CKB Pudge testnet confirmed 2026-05-15 (tx [`0xc658f9e8…3c96`](https://pudge.explorer.nervos.org/transaction/0xc658f9e8a846747a3aad373b2145ac49d920aba00c88885219d6c25f3dc53c96)).
-- **Phase 4 (hardening + audit prep):** next.
+- **Phase 4 (hardening + audit prep):** in progress 2026-05-20. Coverage-guided fuzzing of `verifier-core` and the Molecule decoders (three targets), proptest soundness + determinism, [threat model](docs/threat-model.md) drafted.
 - **Mainnet release:** audit-gated.
 
 This is pre-audit infrastructure. Do not deploy to mainnet.
