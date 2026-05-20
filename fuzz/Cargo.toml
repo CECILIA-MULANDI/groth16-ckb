@@ -1,0 +1,24 @@
+[package]
+name = "groth16-ckb-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Standalone workspace so the nightly toolchain pinned in rust-toolchain.toml
+# is scoped to fuzzing only; host and script workspaces stay on stable.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+verifier-core = { path = "../script/crates/verifier-core" }
+
+[[bin]]
+name = "verify_arkworks"
+path = "fuzz_targets/verify_arkworks.rs"
+test = false
+doc = false
+bench = false

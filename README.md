@@ -71,6 +71,15 @@ cargo test -p integration-tests
 
 The differential harness compares `verifier-core`'s output against arkworks across canonical and adversarial inputs (non-canonical field elements, off-subgroup `G2` points, points at infinity, truncated and oversized buffers). The integration tests exercise the production call path: VK in a `cell_dep`, proof + public inputs in `WitnessArgs.input_type`, decoded through Molecule and handed to `verifier-core`.
 
+### Fuzzing
+
+Coverage-guided fuzzing of `verifier-core::verify` lives in [`fuzz/`](fuzz/). The harness feeds `(vk_bytes, proof_bytes, public_inputs_bytes)` as three independent attacker-controlled byte slices and asserts the verifier never panics. Requires `cargo install cargo-fuzz` and a nightly toolchain (pinned in `fuzz/rust-toolchain.toml`, scoped to the fuzz workspace only).
+
+```sh
+cd fuzz
+cargo +nightly fuzz run verify_arkworks
+```
+
 ## Performance
 
 Cycle counts on the production call path (Molecule-decode VK from a `cell_dep`, proof from `WitnessArgs.input_type`, verify on `riscv64imac` CKB-VM) for a circuit with `N` public inputs:
