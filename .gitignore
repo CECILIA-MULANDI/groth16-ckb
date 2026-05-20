@@ -1,5 +1,6 @@
 *.md
 !/README.md
+!/docs/threat-model.md
 target/
 node_modules/
 .env
