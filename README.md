@@ -76,9 +76,12 @@ The differential harness compares `verifier-core`'s output against arkworks acro
 Coverage-guided fuzzing of `verifier-core::verify` lives in [`fuzz/`](fuzz/). The harness feeds `(vk_bytes, proof_bytes, public_inputs_bytes)` as three independent attacker-controlled byte slices and asserts the verifier never panics. Requires `cargo install cargo-fuzz` and a nightly toolchain (pinned in `fuzz/rust-toolchain.toml`, scoped to the fuzz workspace only).
 
 ```sh
+./scripts/gen-fuzz-seed.sh                 # build canonical seed from test_vectors/
 cd fuzz
 cargo +nightly fuzz run verify_arkworks
 ```
+
+The seed file `fuzz/corpus/verify_arkworks/seed-valid` is regenerated deterministically from the committed test vectors; the rest of the corpus is gitignored and grows as the fuzzer discovers interesting inputs. Without the seed, the fuzzer bounces off length pre-checks and never reaches the arkworks deserialization paths where bugs would hide.
 
 ## Performance
 
