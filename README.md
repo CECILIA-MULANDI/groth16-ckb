@@ -73,15 +73,23 @@ The differential harness compares `verifier-core`'s output against arkworks acro
 
 ### Fuzzing
 
-Coverage-guided fuzzing of `verifier-core::verify` lives in [`fuzz/`](fuzz/). The harness feeds `(vk_bytes, proof_bytes, public_inputs_bytes)` as three independent attacker-controlled byte slices and asserts the verifier never panics. Requires `cargo install cargo-fuzz` and a nightly toolchain (pinned in `fuzz/rust-toolchain.toml`, scoped to the fuzz workspace only).
+Coverage-guided fuzz targets live in [`fuzz/`](fuzz/). Requires `cargo install cargo-fuzz` and a nightly toolchain (pinned in `fuzz/rust-toolchain.toml`, scoped to the fuzz workspace only).
+
+| Target | Function | Surface |
+|---|---|---|
+| `verify_arkworks` | `verifier_core::verify` | arkworks deserialization, length pre-checks, infinity rejection, pairing-check entry |
+| `decode_vk_molecule` | `wire_decode::decode_vk_to_arkworks` | Molecule offset/length arithmetic, version check, union dispatch on the VK blob |
+| `decode_witness_molecule` | `wire_decode::decode_witness_to_arkworks` | same surface on the witness blob |
 
 ```sh
-./scripts/gen-fuzz-seed.sh                 # build canonical seed from test_vectors/
+./scripts/gen-fuzz-seed.sh             # build canonical seeds from test_vectors/
 cd fuzz
 cargo +nightly fuzz run verify_arkworks
+cargo +nightly fuzz run decode_vk_molecule
+cargo +nightly fuzz run decode_witness_molecule
 ```
 
-The seed file `fuzz/corpus/verify_arkworks/seed-valid` is regenerated deterministically from the committed test vectors; the rest of the corpus is gitignored and grows as the fuzzer discovers interesting inputs. Without the seed, the fuzzer bounces off length pre-checks and never reaches the arkworks deserialization paths where bugs would hide.
+Each target's `seed-valid` file is regenerated deterministically from the committed test vectors; the rest of `corpus/` is gitignored and grows as the fuzzer discovers interesting inputs. The Molecule targets call into [`wire-decode`](script/crates/wire-decode/), the same crate the on-chain script uses to bridge Molecule bytes to the arkworks-shaped buffers `verifier-core` consumes — so fuzz coverage tracks production code rather than a parallel re-implementation.
 
 ## Performance
 

@@ -14,10 +14,25 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 verifier-core = { path = "../script/crates/verifier-core" }
+wire-decode = { path = "../script/crates/wire-decode" }
 
 [[bin]]
 name = "verify_arkworks"
 path = "fuzz_targets/verify_arkworks.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_vk_molecule"
+path = "fuzz_targets/decode_vk_molecule.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_witness_molecule"
+path = "fuzz_targets/decode_witness_molecule.rs"
 test = false
 doc = false
 bench = false
