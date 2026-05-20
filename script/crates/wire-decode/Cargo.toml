@@ -1,0 +1,9 @@
+[package]
+name = "wire-decode"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+molecule = { version = "0.9", default-features = false }
+groth16-schema = { path = "../groth16-schema" }

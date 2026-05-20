@@ -6,9 +6,8 @@ license.workspace = true
 
 [dependencies]
 ckb-std = "1.1"
-molecule = { version = "0.9", default-features = false }
 verifier-core = { path = "../verifier-core" }
-groth16-schema = { path = "../groth16-schema" }
+wire-decode = { path = "../wire-decode" }
 
 [features]
 library = []

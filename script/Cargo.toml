@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/verifier-core", "crates/ckb-script", "crates/groth16-schema"]
+members = ["crates/verifier-core", "crates/ckb-script", "crates/groth16-schema", "crates/wire-decode"]
 
 [workspace.package]
 edition = "2021"
