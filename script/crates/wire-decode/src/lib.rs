@@ -61,7 +61,8 @@ pub enum DecodeError {
 /// `Reader::from_slice` recursively validates structure, so once we hold a
 /// Reader every `as_slice()` returns a correctly-sized byte string.
 pub fn decode_vk_to_arkworks(molecule_bytes: &[u8]) -> Result<Vec<u8>, DecodeError> {
-    let r = Groth16VerifyingKeyReader::from_slice(molecule_bytes).map_err(|_| DecodeError::Molecule)?;
+    let r =
+        Groth16VerifyingKeyReader::from_slice(molecule_bytes).map_err(|_| DecodeError::Molecule)?;
 
     let version_bytes: [u8; 2] = r
         .version()
@@ -72,11 +73,9 @@ pub fn decode_vk_to_arkworks(molecule_bytes: &[u8]) -> Result<Vec<u8>, DecodeErr
         return Err(DecodeError::Version);
     }
 
-    // Single union variant today; when the schema gains curves the compiler
-    // will require a new arm here.
-    let bn254 = match r.content().to_enum() {
-        VerifyingKeyContentUnionReader::VerifyingKeyBn254(v) => v,
-    };
+    // Single union variant today; when the schema gains curves this pattern
+    // becomes refutable and the compiler will reject it here.
+    let VerifyingKeyContentUnionReader::VerifyingKeyBn254(bn254) = r.content().to_enum();
 
     let ic = bn254.gamma_abc_g1();
     let ic_len = ic.item_count();
@@ -113,9 +112,7 @@ pub fn decode_witness_to_arkworks(
         return Err(DecodeError::Version);
     }
 
-    let bn254 = match r.content().to_enum() {
-        WitnessContentUnionReader::Bn254Witness(v) => v,
-    };
+    let WitnessContentUnionReader::Bn254Witness(bn254) = r.content().to_enum();
 
     let proof = bn254.proof();
     let mut proof_buf = Vec::with_capacity(PROOF_LEN);
