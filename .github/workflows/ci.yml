@@ -1,0 +1,100 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Two toolchains, because the repo has two workspaces. The root
+      # (host, integration-tests) tracks stable. script/ is pinned to 1.94.1
+      # by its own rust-toolchain.toml, since the compiler version is part of
+      # the on-chain binary's identity and a bump changes the code hash.
+      # riscv is listed here too, not just on the pinned toolchain below.
+      # build-ckb-script.sh gates on `rustup target list --installed`, which
+      # resolves against the current directory, and the repo root's
+      # rust-toolchain.toml selects stable. The build itself still runs under
+      # 1.94.1, since the script cds into script/ before building.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv64imac-unknown-none-elf
+          components: clippy, rustfmt
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.94.1
+          targets: riscv64imac-unknown-none-elf
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            script
+
+      # ckb-std compiles the CKB C standard library from source, and cc-rs
+      # resolves the compiler for the riscv target as riscv64-unknown-elf-gcc,
+      # so the bare-metal GNU toolchain has to be present. clang and llvm cover
+      # the llvm-ar and llvm-objcopy that ckb-std's build reaches for.
+      - name: Install the riscv toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-unknown-elf clang llvm
+
+      # Before the tests: integration-tests reads the compiled script binary
+      # off disk and panics with a build hint if it is missing.
+      - name: Build the on-chain script
+        run: ./scripts/build-ckb-script.sh
+
+      - name: Format (script)
+        working-directory: script
+        run: cargo fmt --all -- --check
+
+      # No --all-targets here. These crates are no_std for riscv, so building
+      # their test harnesses asks for an allocator and a panic handler that a
+      # contract deliberately does not have.
+      - name: Clippy (script)
+        working-directory: script
+        run: cargo clippy -- -D warnings
+
+      - name: Format (host)
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (host)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --all
+
+  sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/ts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: sdk/ts/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Test
+        run: pnpm run test
