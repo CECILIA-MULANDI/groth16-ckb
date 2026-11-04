@@ -34,7 +34,8 @@ fn valid_sample(x_value: u64, rng_seed: u64) -> Sample {
     let public_inputs = vec![y];
 
     let mut vk_bytes = Vec::new();
-    vk.serialize_compressed(&mut vk_bytes).expect("vk serialize");
+    vk.serialize_compressed(&mut vk_bytes)
+        .expect("vk serialize");
     let mut proof_bytes = Vec::new();
     proof
         .serialize_compressed(&mut proof_bytes)
