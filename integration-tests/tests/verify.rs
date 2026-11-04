@@ -247,9 +247,7 @@ fn creation_of_trigger_cell_permitted() {
             .build(),
         Bytes::new(),
     );
-    let input = CellInput::new_builder()
-        .previous_output(funding_op)
-        .build();
+    let input = CellInput::new_builder().previous_output(funding_op).build();
 
     let output = CellOutput::new_builder()
         .capacity(1000u64)
@@ -297,4 +295,3 @@ fn bad_witness_version_rejected() {
     let err = run_tx(args, Some(vk_molecule), witness_molecule).unwrap_err();
     assert_exit_code(&err, ERROR_VERSION_MISMATCH);
 }
-
