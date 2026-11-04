@@ -109,10 +109,7 @@ pub fn encode_vk_molecule(vk: &ark_groth16::VerifyingKey<Bn254>) -> Vec<u8> {
 /// Encode an arkworks `Proof<Bn254>` plus its public inputs into the Molecule
 /// `Groth16Witness` wire format. Public inputs are serialized as `Fr` field
 /// elements in their canonical 32-byte form.
-pub fn encode_witness_molecule(
-    proof: &ark_groth16::Proof<Bn254>,
-    public_inputs: &[Fr],
-) -> Vec<u8> {
+pub fn encode_witness_molecule(proof: &ark_groth16::Proof<Bn254>, public_inputs: &[Fr]) -> Vec<u8> {
     let a = G1Compressed::from_slice(&ark_to_bytes(&proof.a)).expect("proof.a -> 32 bytes");
     let b = G2Compressed::from_slice(&ark_to_bytes(&proof.b)).expect("proof.b -> 64 bytes");
     let c = G1Compressed::from_slice(&ark_to_bytes(&proof.c)).expect("proof.c -> 32 bytes");
@@ -182,9 +179,7 @@ mod tests {
         let version_bytes: [u8; 2] = r.version().as_slice().try_into().unwrap();
         assert_eq!(u16::from_le_bytes(version_bytes), WIRE_VERSION);
 
-        let bn254 = match r.content().to_enum() {
-            VerifyingKeyContentUnionReader::VerifyingKeyBn254(v) => v,
-        };
+        let VerifyingKeyContentUnionReader::VerifyingKeyBn254(bn254) = r.content().to_enum();
         assert_eq!(bn254.alpha_g1().as_slice().len(), 32);
         assert_eq!(bn254.beta_g2().as_slice().len(), 64);
         assert_eq!(bn254.gamma_g2().as_slice().len(), 64);
@@ -202,9 +197,7 @@ mod tests {
         let version_bytes: [u8; 2] = r.version().as_slice().try_into().unwrap();
         assert_eq!(u16::from_le_bytes(version_bytes), WIRE_VERSION);
 
-        let bn254 = match r.content().to_enum() {
-            WitnessContentUnionReader::Bn254Witness(v) => v,
-        };
+        let WitnessContentUnionReader::Bn254Witness(bn254) = r.content().to_enum();
         assert_eq!(bn254.proof().a().as_slice().len(), 32);
         assert_eq!(bn254.proof().b().as_slice().len(), 64);
         assert_eq!(bn254.proof().c().as_slice().len(), 32);
@@ -220,8 +213,8 @@ mod tests {
             public_inputs: pi.iter().copied().map(Some).collect(),
             sum: Some(sum),
         };
-        let (pk, vk) = Groth16::<Bn254>::circuit_specific_setup(circuit.clone(), &mut rng)
-            .expect("setup");
+        let (pk, vk) =
+            Groth16::<Bn254>::circuit_specific_setup(circuit.clone(), &mut rng).expect("setup");
         let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng).expect("prove");
         let pvk = Groth16::<Bn254>::process_vk(&vk).expect("process_vk");
         assert!(
