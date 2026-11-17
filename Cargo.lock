@@ -2356,9 +2356,9 @@ version = "0.0.0"
 dependencies = [
  "ark-bn254",
  "ark-ec",
+ "ark-ff",
  "ark-groth16",
  "ark-serialize",
- "ark-snark",
 ]
 
 [[package]]

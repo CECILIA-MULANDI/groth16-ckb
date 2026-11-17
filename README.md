@@ -97,14 +97,14 @@ Cycle counts on the production call path (Molecule-decode VK from a `cell_dep`, 
 
 | num_public_inputs | cycles      | % of 250M bound |
 |------------------:|------------:|----------------:|
-|                 1 | 102,419,769 |            41.0 |
-|                 4 | 103,234,891 |            41.3 |
-|                 8 | 104,285,448 |            41.7 |
-|                16 | 106,588,487 |            42.6 |
-|                32 | 111,343,646 |            44.5 |
-|                64 | 121,128,923 |            48.5 |
+|                 1 |  79,189,934 |            31.7 |
+|                 4 |  79,971,576 |            32.0 |
+|                 8 |  81,075,910 |            32.4 |
+|                16 |  83,339,215 |            33.3 |
+|                32 |  88,059,126 |            35.2 |
+|                64 |  97,844,393 |            39.1 |
 
-The fixed-cost component (~102M cycles at N=1) is the pairing check; each additional public input adds ~270k–300k cycles for one G1 scalar multiplication. Binary size is 96 KB and the default 1.5 MB heap is sufficient across the whole range.
+The fixed-cost component (~79M cycles at N=1) is the pairing check, done as a single product of four Miller loops with one final exponentiation; each additional public input adds ~260k–300k cycles for one G1 scalar multiplication. Binary size is 96 KB and the default 1.5 MB heap is sufficient across the whole range.
 
 Reproduce with:
 

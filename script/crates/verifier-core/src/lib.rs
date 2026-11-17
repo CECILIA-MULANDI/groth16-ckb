@@ -40,10 +40,10 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use ark_bn254::{Bn254, Fr};
-use ark_ec::AffineRepr;
-use ark_groth16::{Groth16, Proof, VerifyingKey};
+use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
+use ark_ff::{One, PrimeField};
+use ark_groth16::{Proof, VerifyingKey};
 use ark_serialize::CanonicalDeserialize;
-use ark_snark::SNARK;
 
 const G1_AFFINE_LEN: usize = 32;
 const G2_AFFINE_LEN: usize = 64;
@@ -171,8 +171,37 @@ pub fn verify(
         public_inputs.push(fe);
     }
 
-    match Groth16::<Bn254>::verify(&vk, &public_inputs, &proof) {
-        Ok(true) => Ok(()),
-        _ => Err(VerifyError::VerificationFailed),
+    // On the deserialized vectors. The cross-check above compares the two length
+    // prefixes; prepare_inputs (dropped with Groth16::verify) was what checked the
+    // decoded vectors. Without this, a divergence would let the zip below truncate
+    // silently.
+    if public_inputs.len() + 1 != vk.gamma_abc_g1.len() {
+        return Err(VerifyError::PublicInputCountMismatch);
+    }
+
+    // The Groth16 equation as one pairing product:
+    //
+    //   e(A, B) · e(-α, β) · e(-X, γ) · e(-C, δ) = 1,   X = IC₀ + Σ xᵢ·ICᵢ
+    //
+    // ark_groth16::verify checks e(A,B)·e(X,-γ)·e(C,-δ) = e(α,β) and recomputes
+    // e(α,β) on every call: four Miller loops and two final exponentiations. One
+    // product is four Miller loops and one final exponentiation. The negations are
+    // field negations in G1.
+    let mut x = vk.gamma_abc_g1[0].into_group();
+    for (input, base) in public_inputs.iter().zip(&vk.gamma_abc_g1[1..]) {
+        x += base.mul_bigint(input.into_bigint());
+    }
+    let g1 = [proof.a, -vk.alpha_g1, (-x).into_affine(), -proof.c];
+    let g2 = [proof.b, vk.beta_g2, vk.gamma_g2, vk.delta_g2];
+
+    // Bn254::multi_pairing is final_exponentiation(multi_miller_loop(..)).unwrap();
+    // under panic = "abort" that unwrap aborts the VM instead of failing the script.
+    // Do the two steps and turn None into a clean error.
+    let ml = Bn254::multi_miller_loop(g1, g2);
+    let out = Bn254::final_exponentiation(ml).ok_or(VerifyError::VerificationFailed)?;
+    if out.0.is_one() {
+        Ok(())
+    } else {
+        Err(VerifyError::VerificationFailed)
     }
 }
